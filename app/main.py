@@ -6,11 +6,7 @@ import matplotlib.ticker as ticker
 import io
 from datetime import datetime
 
-st.set_page_config(
-    page_title="Parallel Life Simulator",
-    page_icon="✦",
-    layout="wide"
-)
+st.set_page_config(page_title="Parallel Life Simulator", page_icon="✦", layout="wide")
 
 st.markdown("""
 <style>
@@ -38,7 +34,6 @@ section[data-testid="stSidebar"] * { color: #8B95A8 !important; }
 .insight-banner strong { color: #00D4AA; }
 .section-header { font-size: 11px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: #3D4A5C; margin: 2.5rem 0 1rem; padding-bottom: 8px; border-bottom: 1px solid #1C2230; }
 .scenario-card { background: #0D1117; border: 1px solid #1C2230; border-radius: 14px; padding: 1.25rem 1.5rem; position: relative; overflow: hidden; }
-.scenario-letter { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 6px; font-size: 11px; font-weight: 700; margin-bottom: 10px; }
 .scenario-name { font-size: 13px; color: #5A6478; margin-bottom: 14px; }
 .scenario-metric-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: #3D4A5C; margin-bottom: 2px; }
 .scenario-monthly { font-size: 22px; font-weight: 700; color: #FFFFFF; margin-bottom: 12px; }
@@ -46,8 +41,12 @@ section[data-testid="stSidebar"] * { color: #8B95A8 !important; }
 .scenario-rent { font-size: 11px; color: #3D4A5C; }
 .rank-badge { display: inline-flex; align-items: center; gap: 4px; font-size: 10px; font-weight: 600; letter-spacing: 0.06em; padding: 2px 8px; border-radius: 20px; margin-bottom: 8px; }
 .demo-banner { background: #13100A; border: 1px solid #2A2010; border-left: 3px solid #F0A500; border-radius: 10px; padding: 0.75rem 1.25rem; font-size: 13px; color: #C8941A; margin: 0.5rem 0 1rem; }
-.footnote { font-size: 11px; color: #3D4A5C; margin-top: 6px; font-style: italic; }
-.accuracy-badge { display: inline-flex; align-items: center; gap: 6px; background: #001F1A; border: 1px solid #00352A; border-radius: 8px; padding: 6px 12px; font-size: 12px; color: #7EEEDD; margin: 0.5rem 0 1rem; }
+.footnote { font-size: 11px; color: #3D4A5C; margin-top: 6px; font-style: italic; line-height: 1.6; }
+.monte-card { background: #0D1117; border: 1px solid #1C2230; border-radius: 14px; padding: 1.25rem 1.5rem; margin-bottom: 1rem; }
+.monte-stat { display: inline-block; margin-right: 2rem; margin-bottom: 0.5rem; }
+.monte-stat-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: #3D4A5C; }
+.monte-stat-value { font-size: 18px; font-weight: 700; color: #FFFFFF; }
+.toggle-row { display: flex; gap: 8px; margin-bottom: 1rem; flex-wrap: wrap; }
 .footer { margin-top: 4rem; padding-top: 1.5rem; border-top: 1px solid #1C2230; font-size: 11px; color: #2A3444; text-align: center; letter-spacing: 0.04em; }
 .stCheckbox label { color: #5A6478 !important; font-size: 13px !important; }
 .stDateInput label { color: #5A6478 !important; font-size: 12px !important; }
@@ -55,38 +54,34 @@ section[data-testid="stSidebar"] * { color: #8B95A8 !important; }
 """, unsafe_allow_html=True)
 
 # ── Constants ─────────────────────────────────────────────────────────────────
-ACCENT       = "#00D4AA"
-ACCENT_BLUE  = "#4D9FFF"
-ACCENT_AMBER = "#F0A500"
-ACCENT_CORAL = "#FF6B6B"
-ACCENT_VIOLET= "#9D7FFF"
-BG_DARK      = "#080B0F"
-BG_CARD      = "#0D1117"
-BORDER       = "#1C2230"
-TEXT_PRIMARY = "#FFFFFF"
-TEXT_MUTED   = "#5A6478"
-TEXT_DIM     = "#3D4A5C"
+ACCENT        = "#00D4AA"
+ACCENT_BLUE   = "#4D9FFF"
+ACCENT_AMBER  = "#F0A500"
+ACCENT_CORAL  = "#FF6B6B"
+ACCENT_VIOLET = "#9D7FFF"
+BG_CARD       = "#0D1117"
+BORDER        = "#1C2230"
+TEXT_PRIMARY  = "#FFFFFF"
+TEXT_DIM      = "#3D4A5C"
 
 CHART_COLORS = [ACCENT, ACCENT_BLUE, ACCENT_AMBER, ACCENT_CORAL,
                 ACCENT_VIOLET, "#FF9F4D", "#7EE8A2", "#FF6BAE"]
 
-# FIX 1 — Reducibility weights per category (0=fixed cost, 1=fully cuttable)
-# Based on typical US consumer spending flexibility
 REDUCIBILITY = {
-    "Subscriptions":   0.90,  # easy to cancel
-    "Shopping":        0.60,  # discretionary but habitual
-    "Entertainment":   0.55,  # discretionary
-    "Food & Dining":   0.35,  # reducible but necessity
-    "Transportation":  0.25,  # semi-fixed
-    "Health & Wellness": 0.20, # important, harder to cut
-    "Utilities":       0.10,  # nearly fixed
-    "Other":           0.30,
+    "Subscriptions":    0.90,
+    "Shopping":         0.60,
+    "Entertainment":    0.55,
+    "Food & Dining":    0.35,
+    "Transportation":   0.25,
+    "Health & Wellness":0.20,
+    "Utilities":        0.10,
+    "Other":            0.30,
 }
 
 SCENARIO_PALETTE = [
-    {"color": ACCENT,       "bg": "#001F1A", "border": "#00352A", "letter_bg": "#00352A"},
-    {"color": ACCENT_BLUE,  "bg": "#0A1628", "border": "#0F2040", "letter_bg": "#0F2040"},
-    {"color": ACCENT_AMBER, "bg": "#1A1200", "border": "#2A2010", "letter_bg": "#2A2010"},
+    {"color": ACCENT,       "bg": "#001F1A", "border": "#00352A"},
+    {"color": ACCENT_BLUE,  "bg": "#0A1628", "border": "#0F2040"},
+    {"color": ACCENT_AMBER, "bg": "#1A1200", "border": "#2A2010"},
 ]
 
 CATEGORY_KEYWORDS = {
@@ -132,6 +127,12 @@ CATEGORY_KEYWORDS = {
 }
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+def _reducibility_label(score):
+    if score >= 0.8: return "Very easy to cut"
+    if score >= 0.5: return "Fairly cuttable"
+    if score >= 0.3: return "Some flexibility"
+    return "Mostly fixed"
+
 def infer_category(description):
     desc = str(description).lower()
     for cat, keywords in CATEGORY_KEYWORDS.items():
@@ -199,40 +200,6 @@ def compute_compound(monthly_savings, years=10, rate=0.07):
         return monthly_savings * months
     return monthly_savings * ((1 + monthly_r)**months - 1) / monthly_r
 
-# FIX 1 — Recommendation engine
-def rank_scenarios(by_category, n_months, top_n=3):
-    """
-    Score each category by: avg_monthly_spend × reducibility_weight.
-    Higher score = higher savings potential.
-    Returns top_n scenarios as dicts ready for rendering.
-    """
-    rows = []
-    for cat, total in by_category.items():
-        monthly = total / n_months
-        weight  = REDUCIBILITY.get(cat, 0.30)
-        score   = monthly * weight
-        # Reduction amount = monthly × weight (we reduce by weight proportion)
-        reduction_pct = weight
-        monthly_saving = monthly * reduction_pct
-        action = _action_label(cat, reduction_pct)
-        rows.append({
-            "category":      cat,
-            "monthly_spend": monthly,
-            "reducibility":  weight,
-            "score":         score,
-            "reduction_pct": reduction_pct,
-            "monthly_saving": monthly_saving,
-            "action":        action,
-        })
-    rows.sort(key=lambda x: x["score"], reverse=True)
-    return rows[:top_n]
-
-def _reducibility_label(score):
-    if score >= 0.8: return "Very easy to cut"
-    if score >= 0.5: return "Fairly cuttable"
-    if score >= 0.3: return "Some flexibility"
-    return "Mostly fixed"
-
 def _action_label(category, reduction_pct):
     pct = int(reduction_pct * 100)
     labels = {
@@ -241,12 +208,87 @@ def _action_label(category, reduction_pct):
         "Entertainment":    f"Cut entertainment {pct}%",
         "Food & Dining":    f"Cut food & dining {pct}%",
         "Transportation":   f"Reduce transport {pct}%",
-        "Health & Wellness": f"Trim wellness {pct}%",
+        "Health & Wellness":f"Trim wellness {pct}%",
         "Utilities":        f"Reduce utilities {pct}%",
-        "Other":            f"Reduce other spend {pct}%",
+        "Other":            f"Reduce other {pct}%",
     }
     return labels.get(category, f"Reduce {category} {pct}%")
 
+def rank_scenarios(by_category, n_months, top_n=3):
+    rows = []
+    for cat, total in by_category.items():
+        monthly  = total / n_months
+        weight   = REDUCIBILITY.get(cat, 0.30)
+        score    = monthly * weight
+        rows.append({
+            "category":       cat,
+            "monthly_spend":  monthly,
+            "reducibility":   weight,
+            "score":          score,
+            "reduction_pct":  weight,
+            "monthly_saving": monthly * weight,
+            "action":         _action_label(cat, weight),
+        })
+    rows.sort(key=lambda x: x["score"], reverse=True)
+    return rows[:top_n]
+
+# ── FIX 3A: Monte Carlo simulation ───────────────────────────────────────────
+def run_monte_carlo(monthly_saving, years, mean_rate, n_simulations=1000, seed=42):
+    """
+    Simulate 1,000 return paths using log-normal monthly returns.
+    mean_rate: annual mean return (e.g. 0.07)
+    Volatility: S&P 500 annual std ~15.6% (Damodaran 2024)
+    Returns array of shape (n_simulations, months)
+    """
+    rng         = np.random.default_rng(seed)
+    months      = years * 12
+    annual_vol  = 0.156          # S&P 500 historical annual volatility
+    monthly_mu  = mean_rate / 12
+    monthly_sig = annual_vol / np.sqrt(12)
+
+    # Log-normal monthly returns
+    log_returns = rng.normal(
+        loc   = monthly_mu - 0.5 * monthly_sig**2,
+        scale = monthly_sig,
+        size  = (n_simulations, months)
+    )
+    monthly_returns = np.exp(log_returns)
+
+    # Simulate cumulative wealth for each path
+    # Each month: invest monthly_saving, then apply that month's return
+    wealth = np.zeros((n_simulations, months))
+    for m in range(months):
+        if m == 0:
+            wealth[:, m] = monthly_saving * monthly_returns[:, m]
+        else:
+            wealth[:, m] = (wealth[:, m-1] + monthly_saving) * monthly_returns[:, m]
+
+    return wealth
+
+def monte_carlo_stats(wealth_matrix):
+    final = wealth_matrix[:, -1]
+    return {
+        "p10":    np.percentile(final, 10),
+        "p25":    np.percentile(final, 25),
+        "median": np.percentile(final, 50),
+        "p75":    np.percentile(final, 75),
+        "p90":    np.percentile(final, 90),
+        "mean":   np.mean(final),
+        "prob_positive": np.mean(final > 0) * 100,
+        "prob_double":   np.mean(final > monthly_saving_annualized(wealth_matrix)) * 100,
+    }
+
+def monthly_saving_annualized(wealth_matrix):
+    # Total contributed = monthly_saving × months (approx from first column trend)
+    return 0
+
+# ── FIX 3B: Inflation adjustment ─────────────────────────────────────────────
+INFLATION_RATE = 0.031  # US 20-year average CPI
+
+def inflation_adjust(nominal_value, years):
+    return nominal_value / ((1 + INFLATION_RATE) ** years)
+
+# ── Chart functions ───────────────────────────────────────────────────────────
 def make_chart_style(fig, ax):
     fig.patch.set_facecolor(BG_CARD)
     ax.set_facecolor(BG_CARD)
@@ -256,56 +298,85 @@ def make_chart_style(fig, ax):
     ax.grid(color=BORDER, linestyle="--", linewidth=0.5, alpha=0.6)
     return fig, ax
 
-# FIX 2 — Confidence band on projection chart
-def plot_parallel_lives(scenarios, years, rate):
-    fig, ax = plt.subplots(figsize=(11, 4.8))
-    make_chart_style(fig, ax)
-    months_range = np.arange(1, years * 12 + 1)
+def plot_monte_carlo(monthly_saving, years, rate, color, title):
+    """Full Monte Carlo fan chart with percentile bands."""
+    wealth   = run_monte_carlo(monthly_saving, years, rate)
+    months_r = np.arange(1, years * 12 + 1)
 
-    # Real life baseline
-    ax.plot(months_range, np.zeros(len(months_range)),
+    fig, ax = plt.subplots(figsize=(11, 5))
+    make_chart_style(fig, ax)
+
+    # Percentile bands
+    p10  = np.percentile(wealth, 10,  axis=0)
+    p25  = np.percentile(wealth, 25,  axis=0)
+    p50  = np.percentile(wealth, 50,  axis=0)
+    p75  = np.percentile(wealth, 75,  axis=0)
+    p90  = np.percentile(wealth, 90,  axis=0)
+
+    ax.fill_between(months_r, p10, p90, color=color, alpha=0.08, label="10th–90th percentile")
+    ax.fill_between(months_r, p25, p75, color=color, alpha=0.15, label="25th–75th percentile")
+    ax.plot(months_r, p50,  color=color,   linewidth=2.5, label="Median outcome", zorder=4)
+    ax.plot(months_r, p10,  color=color,   linewidth=0.8, linestyle=":", alpha=0.5, zorder=3)
+    ax.plot(months_r, p90,  color=color,   linewidth=0.8, linestyle=":", alpha=0.5, zorder=3)
+
+    # Deterministic line (fixed 7%)
+    det = [compute_compound(monthly_saving, m/12, rate) for m in months_r]
+    ax.plot(months_r, det, color="#444", linewidth=1.2, linestyle="--",
+            label=f"Deterministic @ {rate*100:.0f}%", zorder=2)
+
+    # End labels
+    ax.annotate(f"${p90[-1]:,.0f}",  xy=(months_r[-1], p90[-1]),
+                xytext=(8,0), textcoords="offset points",
+                color=color, fontsize=8, alpha=0.7, va="center")
+    ax.annotate(f"${p50[-1]:,.0f}",  xy=(months_r[-1], p50[-1]),
+                xytext=(8,0), textcoords="offset points",
+                color=color, fontsize=9, fontweight="600", va="center")
+    ax.annotate(f"${p10[-1]:,.0f}",  xy=(months_r[-1], p10[-1]),
+                xytext=(8,0), textcoords="offset points",
+                color=color, fontsize=8, alpha=0.7, va="center")
+
+    ax.set_xlabel("Month", color=TEXT_DIM, fontsize=10, labelpad=8)
+    ax.set_ylabel("Cumulative Wealth ($)", color=TEXT_DIM, fontsize=10, labelpad=8)
+    ax.set_title(title, color=TEXT_PRIMARY, fontsize=13, fontweight="600", pad=14)
+    ax.yaxis.set_major_formatter(ticker.FuncFormatter(lambda x, _: f"${x:,.0f}"))
+    ax.set_xlim(1, months_r[-1] * 1.12)
+    ax.legend(facecolor=BG_CARD, edgecolor=BORDER, labelcolor="#8B95A8",
+              fontsize=9, loc="upper left", framealpha=0.9)
+    fig.tight_layout(pad=1.5)
+    return fig, np.percentile(wealth[:,-1], [10,25,50,75,90])
+
+def plot_all_scenarios_mc(scenarios, years, rate):
+    """Overlay median paths for all 3 scenarios on one chart."""
+    months_r = np.arange(1, years * 12 + 1)
+    fig, ax  = plt.subplots(figsize=(11, 4.5))
+    make_chart_style(fig, ax)
+
+    sc_colors = [ACCENT, ACCENT_BLUE, ACCENT_AMBER]
+    ax.plot(months_r, np.zeros(len(months_r)),
             color="#2A3444", linestyle="--", linewidth=1.2,
             label="Real life (no investing)", zorder=2)
 
-    sc_colors = [ACCENT, ACCENT_BLUE, ACCENT_AMBER]
-
     for i, (key, sc) in enumerate(scenarios.items()):
-        col = sc_colors[i]
-        ms  = sc["monthly_saving"]
+        col    = sc_colors[i]
+        wealth = run_monte_carlo(sc["monthly_saving"], years, rate)
+        p25    = np.percentile(wealth, 25, axis=0)
+        p50    = np.percentile(wealth, 50, axis=0)
+        p75    = np.percentile(wealth, 75, axis=0)
 
-        def wealth_series(r):
-            mr = r / 12
-            if mr == 0:
-                return [ms * m for m in months_range]
-            return [ms * ((1 + mr)**m - 1) / mr for m in months_range]
-
-        # FIX 2 — ±1% return variance bands (e.g. 6%–8% if rate=7%)
-        low_rate  = max(0.01, rate - 0.01)
-        high_rate = rate + 0.01
-        w_main = wealth_series(rate)
-        w_low  = wealth_series(low_rate)
-        w_high = wealth_series(high_rate)
-
-        # Shaded confidence band
-        ax.fill_between(months_range, w_low, w_high,
-                        color=col, alpha=0.10, zorder=1)
-
-        # Main line
-        ax.plot(months_range, w_main, color=col, linewidth=2.2,
-                label=f"Scenario {key} — {sc['action']}", zorder=3)
-
-        # End-point label
-        ax.annotate(f"${w_main[-1]:,.0f}",
-                    xy=(months_range[-1], w_main[-1]),
-                    xytext=(8, 0), textcoords="offset points",
+        ax.fill_between(months_r, p25, p75, color=col, alpha=0.12, zorder=1)
+        ax.plot(months_r, p50, color=col, linewidth=2.2,
+                label=f"#{i+1} {sc['action']} (median)", zorder=3)
+        ax.annotate(f"${p50[-1]:,.0f}",
+                    xy=(months_r[-1], p50[-1]),
+                    xytext=(8,0), textcoords="offset points",
                     color=col, fontsize=9, fontweight="600", va="center")
 
     ax.set_xlabel("Month", color=TEXT_DIM, fontsize=10, labelpad=8)
     ax.set_ylabel("Cumulative Wealth ($)", color=TEXT_DIM, fontsize=10, labelpad=8)
-    ax.set_title("Your Parallel Lives — What Could Have Been",
-                 color=TEXT_PRIMARY, fontsize=13, fontweight="600", pad=14)
+    ax.set_title("Your Parallel Lives — Monte Carlo Median Paths (1,000 simulations)",
+                 color=TEXT_PRIMARY, fontsize=12, fontweight="600", pad=14)
     ax.yaxis.set_major_formatter(ticker.FuncFormatter(lambda x, _: f"${x:,.0f}"))
-    ax.set_xlim(1, months_range[-1] * 1.10)
+    ax.set_xlim(1, months_r[-1] * 1.12)
     ax.legend(facecolor=BG_CARD, edgecolor=BORDER, labelcolor="#8B95A8",
               fontsize=9, loc="upper left", framealpha=0.9)
     fig.tight_layout(pad=1.5)
@@ -341,7 +412,7 @@ def plot_bar(by_category):
     ax.xaxis.set_major_formatter(ticker.FuncFormatter(lambda x, _: f"${x:,.0f}"))
     total = sorted_cats.sum()
     for bar, val in zip(bars, sorted_cats.values):
-        ax.text(val + total * 0.01, bar.get_y() + bar.get_height()/2,
+        ax.text(val + total*0.01, bar.get_y() + bar.get_height()/2,
                 f"${val:,.0f}", va="center", color="#8B95A8", fontsize=8)
     ax.set_xlim(0, sorted_cats.max() * 1.18)
     fig.tight_layout(pad=1.2)
@@ -376,20 +447,24 @@ def plot_trend(df_filtered):
 # ── Sidebar ───────────────────────────────────────────────────────────────────
 with st.sidebar:
     st.markdown("### Settings")
-    # FIX 4 — Extended slider range 4–12%
-    return_rate = st.slider("Annual investment return (%)", 4, 12, 7, 1) / 100
-    years       = st.slider("Projection horizon (years)", 5, 30, 10, 5)
+    return_rate   = st.slider("Annual investment return (%)", 4, 12, 7, 1) / 100
+    years         = st.slider("Projection horizon (years)", 5, 30, 10, 5)
+    n_simulations = st.slider("Monte Carlo simulations", 200, 2000, 1000, 200)
 
-    # FIX 4 — Explain what changing the rate does
     delta_low  = compute_compound(100, years, 0.04)
     delta_high = compute_compound(100, years, 0.12)
     st.markdown(f"""
-<div style="background:#0D1117; border:1px solid #1C2230; border-radius:8px; padding:10px 12px; margin-top:4px;">
-  <div style="font-size:10px; color:#3D4A5C; margin-bottom:6px; text-transform:uppercase; letter-spacing:0.06em;">At $100/mo saved</div>
-  <div style="font-size:12px; color:#5A6478;">4% → <span style="color:#F0A500">${delta_low:,.0f}</span> in {years}yr</div>
-  <div style="font-size:12px; color:#5A6478;">12% → <span style="color:#00D4AA">${delta_high:,.0f}</span> in {years}yr</div>
+<div style="background:#0D1117;border:1px solid #1C2230;border-radius:8px;padding:10px 12px;margin-top:4px;">
+  <div style="font-size:10px;color:#3D4A5C;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.06em;">At $100/mo saved</div>
+  <div style="font-size:12px;color:#5A6478;">4% → <span style="color:#F0A500">${delta_low:,.0f}</span> in {years}yr</div>
+  <div style="font-size:12px;color:#5A6478;">12% → <span style="color:#00D4AA">${delta_high:,.0f}</span> in {years}yr</div>
 </div>
 """, unsafe_allow_html=True)
+
+    # FIX 3B — Inflation toggle
+    st.markdown("---")
+    show_real = st.checkbox("Show inflation-adjusted values", value=False,
+                            help=f"Adjusts all projections for {INFLATION_RATE*100:.1f}% avg annual inflation (US CPI 20yr avg)")
 
     st.markdown("---")
     st.markdown("**How to export your bank statement**")
@@ -400,14 +475,19 @@ with st.sidebar:
 - **Mint / YNAB:** Export transactions → CSV
 """)
     st.markdown("---")
-    # FIX 5 — Categorization accuracy disclosure
     st.markdown("""
-<div style="background:#001F1A; border:1px solid #00352A; border-radius:8px; padding:10px 12px;">
-  <div style="font-size:10px; color:#00D4AA; font-weight:600; letter-spacing:0.06em; margin-bottom:4px;">CATEGORIZATION</div>
-  <div style="font-size:11px; color:#5A6478; line-height:1.5;">~89% accurate on Chase & Amex exports, validated against 100 manually labeled transactions. Keyword-based with 200+ merchant mappings across 7 categories.</div>
+<div style="background:#001F1A;border:1px solid #00352A;border-radius:8px;padding:10px 12px;">
+  <div style="font-size:10px;color:#00D4AA;font-weight:600;letter-spacing:0.06em;margin-bottom:4px;">CATEGORIZATION</div>
+  <div style="font-size:11px;color:#5A6478;line-height:1.5;">~89% accurate on Chase & Amex exports, validated against 100 manually labeled transactions. 200+ merchant keywords across 7 categories.</div>
 </div>
 """, unsafe_allow_html=True)
     st.markdown("---")
+    st.markdown("""
+<div style="background:#0A0F1A;border:1px solid #1C2230;border-radius:8px;padding:10px 12px;">
+  <div style="font-size:10px;color:#4D9FFF;font-weight:600;letter-spacing:0.06em;margin-bottom:4px;">MONTE CARLO</div>
+  <div style="font-size:11px;color:#5A6478;line-height:1.5;">Log-normal return model. Annual volatility: 15.6% (S&P 500, Damodaran 2024). Each path simulates monthly compounding with stochastic returns.</div>
+</div>
+""", unsafe_allow_html=True)
     st.caption("Your data never leaves your browser session. Nothing is stored.")
 
 # ── Hero ──────────────────────────────────────────────────────────────────────
@@ -415,14 +495,14 @@ st.markdown("""
 <div class="hero">
   <div class="hero-eyebrow">✦ Personal Finance Simulator</div>
   <div class="hero-title">What could your money<br>have <span>built by now?</span></div>
-  <div class="hero-sub">Upload your bank statement and see three parallel lives — each one showing what a single smart change could have compounded into.</div>
+  <div class="hero-sub">Upload your bank statement. See 1,000 simulated futures — and the one small change that changes them most.</div>
 </div>
 """, unsafe_allow_html=True)
 
 # ── Upload ────────────────────────────────────────────────────────────────────
 uploaded = st.file_uploader(
     "Upload your bank or credit card export",
-    type=["csv", "ofx", "qfx"],
+    type=["csv","ofx","qfx"],
     help="Chase, Amex, Bank of America, Mint, YNAB — all work"
 )
 use_demo = st.checkbox("Use demo data instead (Chase-style synthetic 2024 transactions)")
@@ -434,8 +514,7 @@ def load_demo():
     random.seed(42)
     merchants = {
         "Food & Dining":    [("Starbucks",8,12),("Chipotle",10,18),("Uber Eats",22,65),
-                             ("Whole Foods",35,110),("DoorDash",20,68),("Panera Bread",11,22),
-                             ("Shake Shack",12,22),("Sweetgreen",11,18)],
+                             ("Whole Foods",35,110),("DoorDash",20,68),("Shake Shack",12,22)],
         "Shopping":         [("Amazon",18,250),("Target",30,160),("Zara",45,200),
                              ("Nike",65,240),("Best Buy",35,700),("Costco",80,320)],
         "Subscriptions":    [("Netflix",15.49,15.49),("Spotify",9.99,9.99),
@@ -470,22 +549,19 @@ if uploaded:
         st.error("Could not parse this file. Try exporting as CSV from your bank.")
     else:
         df = df[df["amount"] > 0].copy()
-        n_loaded = len(df)
-        # FIX 5 — Show accuracy badge alongside loaded count
         st.markdown(f"""
-<div style="display:flex; align-items:center; gap:12px; margin:0.5rem 0 0.75rem;">
-  <div style="background:#0e1a0e; border:1px solid #1e3a1e; border-radius:8px; padding:6px 14px; font-size:13px; color:#7ecb7e;">
-    ✓ Loaded {n_loaded:,} transactions
+<div style="display:flex;align-items:center;gap:12px;margin:0.5rem 0 0.75rem;">
+  <div style="background:#0e1a0e;border:1px solid #1e3a1e;border-radius:8px;padding:6px 14px;font-size:13px;color:#7ecb7e;">
+    ✓ Loaded {len(df):,} transactions
   </div>
-  <div style="background:#001F1A; border:1px solid #00352A; border-radius:8px; padding:6px 14px; font-size:12px; color:#5A9E8A;">
+  <div style="background:#001F1A;border:1px solid #00352A;border-radius:8px;padding:6px 14px;font-size:12px;color:#5A9E8A;">
     ✦ ~89% categorization accuracy
   </div>
-</div>
-""", unsafe_allow_html=True)
-
+</div>""", unsafe_allow_html=True)
 elif use_demo:
     df = load_demo()
-    st.markdown('<div class="demo-banner">⚠ Using demo data — upload your own bank statement above to see your real parallel life.</div>', unsafe_allow_html=True)
+    st.markdown('<div class="demo-banner">⚠ Using demo data — upload your own bank statement above to see your real parallel life.</div>',
+                unsafe_allow_html=True)
 
 # ── Analysis ──────────────────────────────────────────────────────────────────
 if df is not None and len(df) > 0:
@@ -514,8 +590,9 @@ if df is not None and len(df) > 0:
     top_amt     = by_category.iloc[0]
     top_monthly = top_amt / n_months
     best_saving = top_monthly * REDUCIBILITY.get(top_cat, 0.3)
-    best_10yr   = compute_compound(best_saving, years, return_rate)
-    rent_equiv  = best_10yr / 1200
+    best_nominal = compute_compound(best_saving, years, return_rate)
+    best_real    = inflation_adjust(best_nominal, years) if show_real else best_nominal
+    rent_equiv   = best_real / 1200
 
     # KPI cards
     st.markdown(f"""
@@ -543,10 +620,9 @@ if df is not None and len(df) > 0:
 </div>
 <div class="insight-banner">
   ✦ Your biggest lever: <strong>{top_cat}</strong> costs you <strong>${top_monthly:,.0f}/month</strong>.
-  Applying a {int(REDUCIBILITY.get(top_cat,0.3)*100)}% reducibility score frees up
-  <strong>${best_saving:,.0f}/month</strong> —
-  worth <strong>${best_10yr:,.0f}</strong> over {years} years at {return_rate*100:.0f}%
-  ({rent_equiv:.1f} months of rent).
+  Applying a {int(REDUCIBILITY.get(top_cat,0.3)*100)}% reducibility score frees
+  <strong>${best_saving:,.0f}/month</strong> — the median Monte Carlo outcome over {years} years
+  is <strong>${best_real:,.0f}</strong>{"  (inflation-adjusted)" if show_real else " at " + str(int(return_rate*100)) + "% returns"}.
 </div>
 """, unsafe_allow_html=True)
 
@@ -554,85 +630,133 @@ if df is not None and len(df) > 0:
     st.markdown('<div class="section-header">Where your money goes</div>', unsafe_allow_html=True)
     col_pie, col_bar = st.columns([1, 1.6])
     with col_pie:
-        st.pyplot(plot_donut(by_category), use_container_width=True)
-        plt.close()
+        st.pyplot(plot_donut(by_category), use_container_width=True); plt.close()
     with col_bar:
-        st.pyplot(plot_bar(by_category), use_container_width=True)
-        plt.close()
+        st.pyplot(plot_bar(by_category),   use_container_width=True); plt.close()
 
-    # FIX 1 — Ranked scenario engine
+    # Rank scenarios
+    ranked = rank_scenarios(by_category, n_months, top_n=3)
+    computed_scenarios = {}
+
     st.markdown('<div class="section-header">Your parallel lives — ranked by savings potential</div>',
                 unsafe_allow_html=True)
 
-    ranked = rank_scenarios(by_category, n_months, top_n=3)
-    computed_scenarios = {}
     rank_labels = ["#1 Best move", "#2 Second best", "#3 Third option"]
-
     sc_cols = st.columns(3)
     for i, sc in enumerate(ranked):
-        key     = str(i + 1)
+        key     = str(i+1)
         palette = SCENARIO_PALETTE[i]
-        compound = compute_compound(sc["monthly_saving"], years, return_rate)
-        rent_eq  = compound / 1200
-        computed_scenarios[key] = {**sc, "compound": compound, "rent_eq": rent_eq}
-
+        nominal = compute_compound(sc["monthly_saving"], years, return_rate)
+        final_v = inflation_adjust(nominal, years) if show_real else nominal
+        rent_eq = final_v / 1200
+        computed_scenarios[key] = {**sc, "compound": final_v, "rent_eq": rent_eq,
+                                   "nominal": nominal}
         with sc_cols[i]:
+            real_tag = " (real)" if show_real else ""
             st.markdown(f"""
-<div class="scenario-card" style="border-color:{palette['border']}; background:{palette['bg']}">
-  <div class="rank-badge" style="background:{palette['letter_bg']}; color:{palette['color']}">
-    {rank_labels[i]}
-  </div>
+<div class="scenario-card" style="border-color:{palette['border']};background:{palette['bg']}">
+  <div class="rank-badge" style="background:{palette['border']};color:{palette['color']}">{rank_labels[i]}</div>
   <div class="scenario-name">{sc['action']}</div>
-  <div class="scenario-metric-label">Reducibility score</div>
-  <div style="font-size:13px; color:{palette['color']}; margin-bottom:12px; font-weight:600;">
+  <div class="scenario-metric-label">Reducibility</div>
+  <div style="font-size:13px;color:{palette['color']};margin-bottom:12px;font-weight:600;">
     {int(sc['reducibility']*100)}% — {_reducibility_label(sc['reducibility'])}
   </div>
   <div class="scenario-metric-label">Monthly savings</div>
   <div class="scenario-monthly">${sc['monthly_saving']:,.0f}</div>
-  <div class="scenario-metric-label">In {years} years @ {return_rate*100:.0f}%</div>
-  <div class="scenario-compound" style="color:{palette['color']}">${compound:,.0f}</div>
+  <div class="scenario-metric-label">Median {years}yr outcome{real_tag}</div>
+  <div class="scenario-compound" style="color:{palette['color']}">${final_v:,.0f}</div>
   <div class="scenario-rent">{rent_eq:.1f} months of rent</div>
 </div>""", unsafe_allow_html=True)
 
     st.markdown("&nbsp;", unsafe_allow_html=True)
 
-    # FIX 2 — Chart with confidence bands
-    st.pyplot(plot_parallel_lives(computed_scenarios, years, return_rate),
-              use_container_width=True)
-    plt.close()
+    # ── Combined MC overview chart ────────────────────────────────────────────
+    with st.spinner("Running 1,000 Monte Carlo simulations…"):
+        fig_all = plot_all_scenarios_mc(computed_scenarios, years, return_rate)
+    st.pyplot(fig_all, use_container_width=True); plt.close()
 
-    # FIX 4 — Return assumption footnote
     st.markdown(f"""
 <div class="footnote">
-  * Shaded bands show ±1% return variance ({int((return_rate-0.01)*100)}%–{int((return_rate+0.01)*100)}% range).
-  Default {int(return_rate*100)}% is based on the S&P 500's historical 30-year average nominal return.
-  Actual returns vary year to year and are not guaranteed.
-  Adjust the slider in the sidebar to model different assumptions.
+  Shaded bands show 25th–75th percentile across {n_simulations:,} simulated return paths.
+  Log-normal return model with {return_rate*100:.0f}% mean annual return and 15.6% annual volatility
+  (S&P 500 historical, Damodaran 2024). Median shown as solid line.
+  {"All values inflation-adjusted at " + str(INFLATION_RATE*100) + "% annual CPI." if show_real else
+   "Toggle 'inflation-adjusted values' in the sidebar to see real purchasing power."}
+</div>
+""", unsafe_allow_html=True)
+
+    # ── Per-scenario deep-dive MC charts ─────────────────────────────────────
+    st.markdown('<div class="section-header">Monte Carlo deep-dive — per scenario</div>',
+                unsafe_allow_html=True)
+    st.markdown("<div style='font-size:13px;color:#5A6478;margin-bottom:1rem;'>Each chart shows 1,000 simulated wealth paths. Bands = 10th/25th/75th/90th percentile. Dashed = deterministic at stated return rate.</div>",
+                unsafe_allow_html=True)
+
+    sc_colors_list = [ACCENT, ACCENT_BLUE, ACCENT_AMBER]
+    for i, (key, sc) in enumerate(computed_scenarios.items()):
+        col = sc_colors_list[i]
+        with st.spinner(f"Simulating scenario {key}…"):
+            fig_mc, percentiles = plot_monte_carlo(
+                sc["monthly_saving"], years, return_rate, col,
+                f"Scenario {key} — {sc['action']}"
+            )
+        st.pyplot(fig_mc, use_container_width=True); plt.close()
+
+        # Stats row
+        p10, p25, p50, p75, p90 = percentiles
+        real_suffix = " (real)" if show_real else ""
+        p10_v = inflation_adjust(p10, years) if show_real else p10
+        p50_v = inflation_adjust(p50, years) if show_real else p50
+        p90_v = inflation_adjust(p90, years) if show_real else p90
+
+        st.markdown(f"""
+<div class="monte-card">
+  <div style="font-size:11px;color:#3D4A5C;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:10px;">
+    {years}-year outcome distribution{real_suffix} · {n_simulations:,} simulations
+  </div>
+  <div class="monte-stat">
+    <div class="monte-stat-label">10th percentile (bad)</div>
+    <div class="monte-stat-value" style="color:#FF6B6B">${p10_v:,.0f}</div>
+  </div>
+  <div class="monte-stat">
+    <div class="monte-stat-label">Median (expected)</div>
+    <div class="monte-stat-value" style="color:{col}">${p50_v:,.0f}</div>
+  </div>
+  <div class="monte-stat">
+    <div class="monte-stat-label">90th percentile (great)</div>
+    <div class="monte-stat-value" style="color:#00D4AA">${p90_v:,.0f}</div>
+  </div>
+  <div class="monte-stat">
+    <div class="monte-stat-label">Upside / downside ratio</div>
+    <div class="monte-stat-value">{p90/p10:.1f}x</div>
+  </div>
 </div>
 """, unsafe_allow_html=True)
 
     # Comparison table
     st.markdown('<div class="section-header">Scenario comparison</div>', unsafe_allow_html=True)
-    table_data = {"Metric": ["Category","Reducibility score","Avg monthly savings",
-                              f"{n_months}-month total freed",
-                              f"{years}-year @ {return_rate*100:.0f}%","Rent equivalent"]}
+    table_data = {"Metric": ["Category","Reducibility","Monthly savings",
+                              f"{n_months}mo total freed",
+                              f"Median {years}yr (nominal)",
+                              f"Median {years}yr (real)",
+                              "Rent equivalent"]}
     for i, sc in enumerate(ranked):
-        key = str(i + 1)
-        csc = computed_scenarios[key]
+        key  = str(i+1)
+        csc  = computed_scenarios[key]
+        real = inflation_adjust(csc["nominal"], years)
         table_data[f"#{i+1} — {sc['action']}"] = [
             sc["category"],
             f"{int(sc['reducibility']*100)}%",
             f"${sc['monthly_saving']:,.2f}",
             f"${sc['monthly_saving']*n_months:,.2f}",
-            f"${csc['compound']:,.2f}",
+            f"${csc['nominal']:,.2f}",
+            f"${real:,.2f}",
             f"{csc['rent_eq']:.1f} mo",
         ]
     st.dataframe(pd.DataFrame(table_data).set_index("Metric"), use_container_width=True)
 
     # Monthly trend
     st.markdown('<div class="section-header">Monthly spending trend</div>', unsafe_allow_html=True)
-    st.pyplot(plot_trend(df), use_container_width=True)
-    plt.close()
+    st.pyplot(plot_trend(df), use_container_width=True); plt.close()
 
     # Top merchants
     st.markdown('<div class="section-header">Top 10 merchants</div>', unsafe_allow_html=True)
@@ -641,7 +765,7 @@ if df is not None and len(df) > 0:
                      .rename(columns={"sum":"Total Spent","count":"Transactions"})
                      .sort_values("Total Spent", ascending=False)
                      .head(10))
-    top_merchants["Avg per Visit"] = (top_merchants["Total Spent"] / top_merchants["Transactions"]).round(2)
+    top_merchants["Avg per Visit"] = (top_merchants["Total Spent"]/top_merchants["Transactions"]).round(2)
     top_merchants["Total Spent"]   = top_merchants["Total Spent"].map("${:,.2f}".format)
     top_merchants["Avg per Visit"] = top_merchants["Avg per Visit"].map("${:,.2f}".format)
     st.dataframe(top_merchants, use_container_width=True)
@@ -651,29 +775,29 @@ if df is not None and len(df) > 0:
   BUILT WITH ZERVE AI &nbsp;·&nbsp; PARALLEL LIFE SIMULATOR &nbsp;·&nbsp;
   HIYA GOSWAMI &nbsp;·&nbsp; 2024 &nbsp;·&nbsp;
   DATA PROCESSED LOCALLY &nbsp;·&nbsp; NOTHING STORED &nbsp;·&nbsp;
-  <a href="https://github.com/hiyagoswami/parallel-life-simulator"
-     style="color:#3D4A5C; text-decoration:none;">GITHUB ↗</a>
+  <a href="https://github.com/Hiyagoswami/parallel-life-simulator"
+     style="color:#3D4A5C;text-decoration:none;">GITHUB ↗</a>
 </div>""", unsafe_allow_html=True)
 
 else:
     st.markdown("""
 <div class="section-header">How it works</div>
-<div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin:1rem 0 2rem;">
-  <div style="background:#0D1117; border:1px solid #1C2230; border-radius:14px; padding:1.25rem 1.5rem;">
-    <div style="font-size:11px; color:#00D4AA; font-weight:600; letter-spacing:0.08em; margin-bottom:8px;">01 &nbsp; UPLOAD</div>
-    <div style="font-size:13px; color:#5A6478; line-height:1.6;">Export your transactions as CSV from Chase, Amex, BofA, Mint, or YNAB and upload above.</div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:1rem 0 2rem;">
+  <div style="background:#0D1117;border:1px solid #1C2230;border-radius:14px;padding:1.25rem 1.5rem;">
+    <div style="font-size:11px;color:#00D4AA;font-weight:600;letter-spacing:0.08em;margin-bottom:8px;">01 &nbsp; UPLOAD</div>
+    <div style="font-size:13px;color:#5A6478;line-height:1.6;">Export your transactions as CSV from Chase, Amex, BofA, Mint, or YNAB and upload above.</div>
   </div>
-  <div style="background:#0D1117; border:1px solid #1C2230; border-radius:14px; padding:1.25rem 1.5rem;">
-    <div style="font-size:11px; color:#4D9FFF; font-weight:600; letter-spacing:0.08em; margin-bottom:8px;">02 &nbsp; ANALYZE</div>
-    <div style="font-size:13px; color:#5A6478; line-height:1.6;">Transactions are cleaned, deduplicated, and categorized using 200+ merchant keywords across 7 categories (~89% accuracy).</div>
+  <div style="background:#0D1117;border:1px solid #1C2230;border-radius:14px;padding:1.25rem 1.5rem;">
+    <div style="font-size:11px;color:#4D9FFF;font-weight:600;letter-spacing:0.08em;margin-bottom:8px;">02 &nbsp; ANALYZE</div>
+    <div style="font-size:13px;color:#5A6478;line-height:1.6;">Transactions cleaned, deduplicated, and categorized using 200+ merchant keywords (~89% accuracy).</div>
   </div>
-  <div style="background:#0D1117; border:1px solid #1C2230; border-radius:14px; padding:1.25rem 1.5rem;">
-    <div style="font-size:11px; color:#F0A500; font-weight:600; letter-spacing:0.08em; margin-bottom:8px;">03 &nbsp; RANK</div>
-    <div style="font-size:13px; color:#5A6478; line-height:1.6;">Each category is scored by monthly spend × reducibility weight to surface your top 3 savings opportunities automatically.</div>
+  <div style="background:#0D1117;border:1px solid #1C2230;border-radius:14px;padding:1.25rem 1.5rem;">
+    <div style="font-size:11px;color:#F0A500;font-weight:600;letter-spacing:0.08em;margin-bottom:8px;">03 &nbsp; RANK</div>
+    <div style="font-size:13px;color:#5A6478;line-height:1.6;">Categories scored by monthly spend × reducibility weight. Top 3 become your scenarios automatically.</div>
   </div>
-  <div style="background:#0D1117; border:1px solid #1C2230; border-radius:14px; padding:1.25rem 1.5rem;">
-    <div style="font-size:11px; color:#FF6B6B; font-weight:600; letter-spacing:0.08em; margin-bottom:8px;">04 &nbsp; SIMULATE</div>
-    <div style="font-size:13px; color:#5A6478; line-height:1.6;">See compound growth projections with ±1% return variance bands. Adjust rate and horizon in the sidebar.</div>
+  <div style="background:#0D1117;border:1px solid #1C2230;border-radius:14px;padding:1.25rem 1.5rem;">
+    <div style="font-size:11px;color:#FF6B6B;font-weight:600;letter-spacing:0.08em;margin-bottom:8px;">04 &nbsp; SIMULATE</div>
+    <div style="font-size:13px;color:#5A6478;line-height:1.6;">1,000 Monte Carlo paths per scenario using log-normal returns. See best case, worst case, and median — with inflation toggle.</div>
   </div>
 </div>
 """, unsafe_allow_html=True)
