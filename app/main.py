@@ -1,9 +1,12 @@
 """
 app.py — Parallel Life Simulator (Streamlit UI)
 
-Genuinely imports from classifier.py and engine.py (real files in this
-same directory) — not inlined, not duplicated. See those files for the
-actual categorization and simulation logic.
+Imports from classifier.py (keyword rules) and engine.py (simulation/ranking).
+Categorization is a two-stage pipeline: classifier.infer_category() (fast,
+deterministic keyword matching) runs first; ml_classifier.categorize_with_fallback()
+(TF-IDF + Logistic Regression, trained on train_labels.csv) resolves anything
+the keyword stage couldn't match. See evaluate_classifier.py for the measured
+accuracy of each stage and the combined pipeline.
 """
 import streamlit as st
 import pandas as pd
@@ -11,11 +14,15 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 import io
+import os
 
 from classifier import (REDUCIBILITY, infer_category,
                         reducibility_label, action_label)
 from engine import (compute_compound, inflation_adjust, run_monte_carlo,
                     monte_carlo_stats, rank_scenarios, INFLATION_RATE)
+from ml_classifier import load_model, categorize_with_fallback, train_and_save
+from report_export import generate_pdf_report, generate_csv_export
+from benchmark import benchmark_category
 
 @st.cache_data(show_spinner=False)
 def cached_monte_carlo(monthly_saving: float, years: int, rate: float, n_sims: int):
@@ -24,19 +31,45 @@ def cached_monte_carlo(monthly_saving: float, years: int, rate: float, n_sims: i
     return run_monte_carlo(monthly_saving, years, rate, n_simulations=n_sims, seed=42)
 
 
-"""
-app.py — Parallel Life Simulator (Streamlit UI)
-Imports from classifier.py and engine.py
-"""
-import streamlit as st
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-import matplotlib.ticker as ticker
-import io
+@st.cache_resource(show_spinner=False)
+@st.cache_resource(show_spinner=False)
+def get_ml_model():
+    """
+    Load the trained ML fallback model once per session, not per rerun.
 
-# ── Module imports (same directory) ──────────────────────────────────────────
+    If fallback_model.joblib isn't present (e.g. a fresh deployment that
+    hasn't run `python3 ml_classifier.py` as a build step), this trains
+    the model on-demand from train_labels.csv instead of silently falling
+    back to keyword-only. This makes the app self-sufficient as long as
+    train_labels.csv ships alongside the code — no separate .joblib upload
+    or build-step coordination required.
 
+    If train_labels.csv is also missing, returns None and the app degrades
+    gracefully to keyword-only categorization (see categorize_transaction).
+    """
+    try:
+        return load_model()
+    except FileNotFoundError:
+        train_csv_path = os.path.join(os.path.dirname(__file__), "train_labels.csv")
+        if os.path.exists(train_csv_path):
+            try:
+                return train_and_save(train_csv=train_csv_path)
+            except Exception:
+                return None
+        return None
+
+
+def categorize_transaction(description: str, ml_model) -> str:
+    """
+    Two-stage categorization: keyword matcher first, ML fallback second.
+    If the ML model isn't available (e.g. not yet trained in this
+    environment), falls back to keyword-only — degrades gracefully
+    rather than crashing.
+    """
+    if ml_model is None:
+        return infer_category(description)
+    category, _method = categorize_with_fallback(description, ml_model)
+    return category
 
 
 st.set_page_config(page_title="Parallel Life Simulator", page_icon="✦", layout="wide")
@@ -216,7 +249,7 @@ SCENARIO_PALETTE = [
 ]
 
 # ── Ingestion ─────────────────────────────────────────────────────────────────
-def parse_uploaded_file(uploaded_file):
+def parse_uploaded_file(uploaded_file, ml_model=None):
     filename = uploaded_file.name.lower()
     content  = uploaded_file.read()
     try:
@@ -243,10 +276,11 @@ def parse_uploaded_file(uploaded_file):
             if "category" in raw.columns:
                 df["category"] = raw["category"].astype(str).str.title().str.strip()
                 df["category"] = df.apply(
-                    lambda r: infer_category(r["description"])
+                    lambda r: categorize_transaction(r["description"], ml_model)
                     if r["category"] in ("Nan","None","","Other") else r["category"], axis=1)
             else:
-                df["category"] = df["description"].apply(infer_category)
+                df["category"] = df["description"].apply(
+                    lambda d: categorize_transaction(d, ml_model))
             return df.reset_index(drop=True)
 
         elif filename.endswith((".ofx",".qfx")):
@@ -266,7 +300,8 @@ def parse_uploaded_file(uploaded_file):
                 "amount":      [abs(float(a)) for a in amounts[:n]],
             })
             df = df[df["amount"] > 0]
-            df["category"] = df["description"].apply(infer_category)
+            df["category"] = df["description"].apply(
+                lambda d: categorize_transaction(d, ml_model))
             return df.reset_index(drop=True)
     except Exception:
         return None
@@ -454,7 +489,7 @@ with st.sidebar:
     st.markdown("""
 <div style="background:#001F1A;border:1px solid #00352A;border-radius:8px;padding:10px 12px;">
   <div style="font-size:10px;color:#00D4AA;font-weight:600;letter-spacing:0.06em;margin-bottom:4px;">CATEGORIZATION</div>
-  <div style="font-size:11px;color:#5A6478;line-height:1.5;">~89% accurate on Chase & Amex exports. 200+ merchant keywords across 7 categories. Weights calibrated to BLS Consumer Expenditure Survey 2023.</div>
+  <div style="font-size:11px;color:#5A6478;line-height:1.5;">Two-stage pipeline: keyword matching (76.0% measured) + TF-IDF/LogReg ML fallback (85.3% measured). Evaluated on 75 held-out labeled transactions never seen during ML training. See evaluate_classifier.py.</div>
 </div>""", unsafe_allow_html=True)
     st.markdown("---")
     st.markdown("""
@@ -511,16 +546,29 @@ def load_demo():
     return pd.DataFrame(rows)
 
 df = None
+ml_model = get_ml_model()
+
+# FIX #3 — persistence via session state: parsing + categorization (including
+# the ML fallback model call) only re-runs when the uploaded file actually
+# changes, not on every slider drag. Without this, adjusting the return-rate
+# slider would silently re-run the full categorization pipeline on every
+# rerun, which is both slow and pointless since the file hasn't changed.
 if uploaded:
-    df = parse_uploaded_file(uploaded)
+    file_signature = (uploaded.name, uploaded.size)
+    if st.session_state.get("_last_file_sig") != file_signature:
+        st.session_state["_parsed_df"] = parse_uploaded_file(uploaded, ml_model=ml_model)
+        st.session_state["_last_file_sig"] = file_signature
+    df = st.session_state.get("_parsed_df")
+
     if df is None:
         st.error("Could not parse this file. Try exporting as CSV from your bank.")
     else:
         df = df[df["amount"] > 0].copy()
+        model_status = "keyword + ML fallback (85.3% measured)" if ml_model is not None else "keyword-only (76.0% measured)"
         st.markdown(f"""
 <div style="display:flex;align-items:center;gap:12px;margin:0.5rem 0 0.75rem;">
   <div style="background:#0e1a0e;border:1px solid #1e3a1e;border-radius:8px;padding:6px 14px;font-size:13px;color:#7ecb7e;">✓ Loaded {len(df):,} transactions</div>
-  <div style="background:#001F1A;border:1px solid #00352A;border-radius:8px;padding:6px 14px;font-size:12px;color:#5A9E8A;">✦ ~89% categorization accuracy</div>
+  <div style="background:#001F1A;border:1px solid #00352A;border-radius:8px;padding:6px 14px;font-size:12px;color:#5A9E8A;">✦ {model_status}</div>
 </div>""", unsafe_allow_html=True)
 elif use_demo:
     df = load_demo()
@@ -585,6 +633,40 @@ if df is not None and len(df) > 0:
     cp, cb = st.columns([1, 1.6])
     with cp: st.pyplot(plot_donut(by_category), use_container_width=True); plt.close()
     with cb: st.pyplot(plot_bar(by_category),   use_container_width=True); plt.close()
+
+    # ── FIX #4 — BLS national benchmark (honestly scoped) ────────────────────
+    benchmark_results = [
+        benchmark_category(cat, total / n_months)
+        for cat, total in by_category.items()
+    ]
+    benchmark_results = [r for r in benchmark_results if r is not None]
+
+    if benchmark_results:
+        st.markdown('<div class="section-header">How you compare — BLS national averages</div>',
+                    unsafe_allow_html=True)
+        st.markdown("""
+<div style="font-size:12px;color:#5A6478;margin-bottom:0.75rem;line-height:1.6;">
+  Comparing your spending to the BLS Consumer Expenditure Survey 2023 national average household.
+  <strong style="color:#FFA532;">Note:</strong> this compares against the national average across all households,
+  not specifically households at your income level — BLS's full income-quintile breakdown by category
+  wasn't available as structured data for this comparison. Only categories with a clean BLS mapping
+  (Food & Dining, Transportation, Health & Wellness, Entertainment) are shown.
+</div>""", unsafe_allow_html=True)
+
+        bm_cols = st.columns(len(benchmark_results))
+        for i, bm in enumerate(benchmark_results):
+            with bm_cols[i]:
+                color = "#FF6B9D" if bm["above_average"] else "#4DFFB4"
+                arrow = "▲" if bm["above_average"] else "▼"
+                st.markdown(f"""
+<div style="background:#0D1117;border:1px solid rgba(255,255,255,0.08);border-radius:14px;padding:1rem 1.1rem;">
+  <div style="font-size:10px;color:rgba(255,255,255,0.3);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:6px;">{bm['category']}</div>
+  <div style="font-size:18px;font-weight:800;color:{color};">{arrow} {abs(bm['diff_pct']):.0f}%</div>
+  <div style="font-size:11px;color:rgba(255,255,255,0.3);margin-top:4px;">vs national avg ${bm['national_avg_monthly']:,.0f}/mo</div>
+</div>""", unsafe_allow_html=True)
+
+        st.markdown('<div class="footnote">Source: BLS "Consumer Expenditures in 2023" (national average annual expenditure $77,280/household, category shares from Table B). National average, not income-adjusted.</div>',
+                    unsafe_allow_html=True)
 
     ranked = rank_scenarios(by_category, n_months, top_n=3)
     computed_scenarios = {}
@@ -681,13 +763,52 @@ if df is not None and len(df) > 0:
     st.pyplot(plot_trend(df), use_container_width=True); plt.close()
 
     st.markdown('<div class="section-header">Top 10 merchants</div>', unsafe_allow_html=True)
-    top_m = (df.groupby("description")["amount"].agg(["sum","count"])
+    top_m_raw = (df.groupby("description")["amount"].agg(["sum","count"])
                .rename(columns={"sum":"Total Spent","count":"Transactions"})
                .sort_values("Total Spent", ascending=False).head(10))
-    top_m["Avg per Visit"] = (top_m["Total Spent"]/top_m["Transactions"]).round(2)
-    top_m["Total Spent"]   = top_m["Total Spent"].map("${:,.2f}".format)
-    top_m["Avg per Visit"] = top_m["Avg per Visit"].map("${:,.2f}".format)
-    st.dataframe(top_m, use_container_width=True)
+    top_m_raw["Avg per Visit"] = (top_m_raw["Total Spent"]/top_m_raw["Transactions"]).round(2)
+
+    top_m_display = top_m_raw.copy()
+    top_m_display["Total Spent"]   = top_m_display["Total Spent"].map("${:,.2f}".format)
+    top_m_display["Avg per Visit"] = top_m_display["Avg per Visit"].map("${:,.2f}".format)
+    st.dataframe(top_m_display, use_container_width=True)
+
+    # ── FIX #3 — Persistence: downloadable PDF + CSV reports ────────────────
+    st.markdown('<div class="section-header">Save your results</div>', unsafe_allow_html=True)
+    st.markdown('<div style="font-size:13px;color:#5A6478;margin-bottom:0.75rem;">Your analysis lives only in this session — download a copy to keep, print, or share.</div>',
+                unsafe_allow_html=True)
+
+    col_pdf, col_csv = st.columns(2)
+    with col_pdf:
+        try:
+            pdf_buffer = generate_pdf_report(
+                total_spent=total_spent, n_months=n_months, by_category=by_category,
+                ranked_scenarios=ranked, computed_scenarios=computed_scenarios,
+                return_rate=return_rate, years=years, top_merchants_df=top_m_raw,
+            )
+            st.download_button(
+                label="📄 Download PDF Report",
+                data=pdf_buffer,
+                file_name="parallel_life_report.pdf",
+                mime="application/pdf",
+                use_container_width=True,
+            )
+        except Exception as e:
+            st.caption(f"PDF generation unavailable: {e}")
+
+    with col_csv:
+        csv_data = generate_csv_export(
+            by_category=by_category, ranked_scenarios=ranked,
+            computed_scenarios=computed_scenarios, n_months=n_months,
+            years=years, return_rate=return_rate,
+        )
+        st.download_button(
+            label="📊 Download CSV Data",
+            data=csv_data,
+            file_name="parallel_life_data.csv",
+            mime="text/csv",
+            use_container_width=True,
+        )
 
     st.markdown("""
 <div class="footer">
